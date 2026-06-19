@@ -1,4 +1,4 @@
-const handler = require("../../api_generate");
+const handler = require("../api_generate");
 
 module.exports = handler;
 
