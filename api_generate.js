@@ -6,7 +6,8 @@ function sendJson(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
-async function fetchJson(url, { headers, method, body } = {}) {
+// POST helper that returns the parsed JSON body of a response.
+async function postJson(url, { headers, body } = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const req = https.request(
@@ -14,7 +15,7 @@ async function fetchJson(url, { headers, method, body } = {}) {
         hostname: u.hostname,
         path: u.pathname + u.search,
         protocol: u.protocol,
-        method: method || "POST",
+        method: "POST",
         headers: headers || {}
       },
       (resp) => {
@@ -23,27 +24,50 @@ async function fetchJson(url, { headers, method, body } = {}) {
           data += chunk;
         });
         resp.on("end", () => {
+          let parsed = null;
           try {
-            resolve(JSON.parse(data));
+            parsed = JSON.parse(data);
           } catch {
-            reject(new Error(`Non-JSON response: ${data.slice(0, 500)}`));
+            parsed = null;
           }
+          resolve({ status: resp.statusCode || 0, json: parsed, raw: data });
         });
       }
     );
-
     req.on("error", reject);
-
-    if (body) {
-      req.write(body);
-    }
+    if (body) req.write(body);
     req.end();
   });
 }
 
-// Vercel serverless handler wrapper
+// Turn the UI selections into a rich, vibrant prompt for the image model.
+function buildPrompt({ prompt, style, mode }) {
+  const styleHints = {
+    Cinematic: "cinematic film still, dramatic lighting, premium color grade",
+    Anime: "vibrant anime illustration, crisp linework, glowing highlights",
+    Cartoon: "playful glossy 3D cartoon style, bold saturated colors",
+    Realistic: "photorealistic, shallow depth of field, 85mm lens, premium photo finish",
+    "3D Render": "glossy 3D render, soft studio lighting, reflective materials",
+    Horror: "moody atmospheric dark art, dramatic neon lighting, no gore"
+  };
+
+  const style_line = styleHints[style] || styleHints.Cinematic;
+  const motion = mode === "video"
+    ? "dynamic cinematic keyframe with a sense of motion"
+    : "striking single hero composition";
+
+  return `${prompt}. ${style_line}, ${motion}. Vibrant, colorful, highly saturated, rich gradients, energetic and modern, high detail, eye-catching premium quality.`;
+}
+
+// Map UI quality 1-5 to a render quality setting.
+function qualityLevel(quality) {
+  const q = typeof quality === "number" ? quality : 4;
+  if (q >= 4) return "high";
+  if (q >= 2) return "medium";
+  return "low";
+}
+
 module.exports = async function handler(req, res) {
-  // Basic CORS (optional)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -74,20 +98,14 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const {
-    prompt,
-    mode,
-    style,
-    quality,
-    references
-  } = payload || {};
+  const { prompt, mode, style, quality } = payload || {};
 
   if (!prompt || typeof prompt !== "string") {
     sendJson(res, 400, { error: "prompt is required" });
     return;
   }
 
-  // Safety block list (lightweight; keep in sync with frontend)
+  // Lightweight safety block list (kept in sync with the frontend).
   const unsafeTerms = [
     "child sexual",
     "minor nude",
@@ -106,70 +124,52 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  // Replicate config
-  const token = process.env.REPLICATE_API_TOKEN;
-  const model = process.env.REPLICATE_MODEL || "stability-ai/sdxl";
-
-  if (!token) {
-    sendJson(res, 500, { error: "Missing REPLICATE_API_TOKEN on server" });
+  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  if (!apiKey) {
+    sendJson(res, 500, { error: "Missing AI_GATEWAY_API_KEY on server" });
     return;
   }
 
-  // NOTE: Different replicate models need different input schema.
-  // This implementation is written for a common SDXL-style schema.
-  // Replace REPLICATE_MODEL and inputs if you use a different model.
-
-  const refCount = Array.isArray(references) ? references.length : 0;
-
-  const input = {
-    prompt,
-    // image references are typically model-specific. For now, we pass them through if the model supports it.
-    // You can adapt this to your chosen model.
-    image_prompts: references && refCount ? references.map((r) => r.dataUrl) : undefined,
-    // basic tuning
-    num_outputs: 1,
-    aspect_ratio: "1:1",
-    guidance_scale: 7.5,
-    num_inference_steps: 30,
-    // simple mapping from UI quality 1-5 to steps
-    num_inference_steps_override: typeof quality === "number" ? Math.round(quality * 6) : undefined
-  };
+  const model = process.env.IMAGE_MODEL || "openai/gpt-image-1";
+  const size = mode === "video" ? "1536x1024" : "1024x1024";
 
   try {
-    // 1) create prediction
-    const create = await fetchJson(`https://api.replicate.com/v1/predictions`, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${token}`
-      },
-      method: "POST",
-      body: JSON.stringify({
-        version: model.startsWith("stability") ? undefined : model,
-        // If REPLICATE_MODEL is a version ID, set it via VERSION_ID env var instead.
-        // For robustness, we send model as "version" only if it looks like a version.
-        // Otherwise, we assume user configured a direct version via REPLICATE_VERSION.
-        // See env vars below.
-        ...(process.env.REPLICATE_VERSION
-          ? { version: process.env.REPLICATE_VERSION }
-          : {})
-      })
-    }).catch((err) => {
-      // If create call failed, return more actionable info
-      throw err;
-    });
+    const { status, json, raw } = await postJson(
+      "https://ai-gateway.vercel.sh/v1/images/generations",
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          prompt: buildPrompt({ prompt, style, mode }),
+          n: 1,
+          size,
+          quality: qualityLevel(quality)
+        })
+      }
+    );
 
-    // If schema mismatch, we need to handle gracefully.
-    // If your replicate model needs a different create call, update this file.
+    if (status < 200 || status >= 300) {
+      const message =
+        json?.error?.message || json?.error || raw?.slice(0, 300) || `Image API error (${status})`;
+      sendJson(res, status || 500, { error: message });
+      return;
+    }
 
-    // We won't poll in this minimal implementation.
-    sendJson(res, 501, {
-      error: "Replicate job creation needs model-specific input schema. Update api_generate.js REPLICATE_MODEL/inputs for your selected replicate model.",
-      receivedModel: model,
-      create
-    });
-    return;
+    const first = json?.data?.[0];
+    const imageUrl = first?.b64_json
+      ? `data:image/png;base64,${first.b64_json}`
+      : first?.url || null;
+
+    if (!imageUrl) {
+      sendJson(res, 502, { error: "No image returned from model" });
+      return;
+    }
+
+    sendJson(res, 200, { ok: true, imageUrl, model });
   } catch (e) {
-    sendJson(res, 500, { error: e.message || "generation_failed" });
+    sendJson(res, 500, { error: e?.message || "generation_failed" });
   }
 };
-

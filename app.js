@@ -117,7 +117,7 @@ const seedCreations = [
     createdAt: "Trending",
     saved: false,
     liked: false,
-    image: "/assets/art-cinematic.svg"
+    image: "/assets/seed-1.png"
   },
   {
     id: "seed-2",
@@ -128,7 +128,7 @@ const seedCreations = [
     createdAt: "Trending",
     saved: false,
     liked: true,
-    image: "/assets/art-video.svg"
+    image: "/assets/seed-2.png"
   },
   {
     id: "seed-3",
@@ -139,7 +139,7 @@ const seedCreations = [
     createdAt: "Featured",
     saved: true,
     liked: false,
-    image: "/assets/art-realistic.svg"
+    image: "/assets/seed-3.png"
   },
   {
     id: "seed-4",
@@ -150,7 +150,7 @@ const seedCreations = [
     createdAt: "New",
     saved: false,
     liked: false,
-    image: "/assets/art-anime.svg"
+    image: "/assets/seed-4.png"
   },
   {
     id: "seed-5",
@@ -161,7 +161,7 @@ const seedCreations = [
     createdAt: "Featured",
     saved: false,
     liked: false,
-    image: "/assets/art-horror.svg"
+    image: "/assets/seed-5.png"
   },
   {
     id: "seed-6",
@@ -172,7 +172,7 @@ const seedCreations = [
     createdAt: "Trending",
     saved: false,
     liked: false,
-    image: "/assets/art-cartoon.svg"
+    image: "/assets/seed-6.png"
   }
 ];
 
@@ -218,7 +218,7 @@ const defaultState = {
       createdAt: "Today",
       saved: true,
       liked: false,
-      image: "/assets/art-realistic.svg"
+      image: "/assets/local-1.png"
     },
     {
       id: "local-2",
@@ -229,7 +229,7 @@ const defaultState = {
       createdAt: "Today",
       saved: false,
       liked: false,
-      image: "/assets/art-video.svg"
+      image: "/assets/local-2.png"
     }
   ]
 };
@@ -438,16 +438,16 @@ function applyPalette(art, paletteId) {
 }
 
 function imageForStyle(style, mode) {
-  if (mode === "video") return "/assets/art-video.svg";
+  if (mode === "video") return "/assets/art-video.png";
   const images = {
-    Anime: "/assets/art-anime.svg",
-    Cartoon: "/assets/art-cartoon.svg",
-    Cinematic: "/assets/art-cinematic.svg",
-    Realistic: "/assets/art-realistic.svg",
-    "3D Render": "/assets/art-render.svg",
-    Horror: "/assets/art-horror.svg"
+    Anime: "/assets/art-anime.png",
+    Cartoon: "/assets/art-cartoon.png",
+    Cinematic: "/assets/art-cinematic.png",
+    Realistic: "/assets/art-realistic.png",
+    "3D Render": "/assets/art-render.png",
+    Horror: "/assets/art-horror.png"
   };
-  return images[style] || "/assets/art-cinematic.svg";
+  return images[style] || "/assets/art-cinematic.png";
 }
 
 function shouldShowWatermark() {

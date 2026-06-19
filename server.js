@@ -11,8 +11,15 @@ const types = {
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
   ".webmanifest": "application/manifest+json; charset=utf-8"
 };
+
+const generateHandler = require("./api_generate");
 
 function sendFile(res, filePath) {
   fs.readFile(filePath, (error, content) => {
@@ -33,6 +40,16 @@ function sendFile(res, filePath) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+
+  // Mirror the Vercel serverless function so the generate flow works in dev.
+  if (url.pathname === "/api/generate") {
+    Promise.resolve(generateHandler(req, res)).catch((error) => {
+      res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ error: error?.message || "generation_failed" }));
+    });
+    return;
+  }
+
   const safePath = path
     .normalize(decodeURIComponent(url.pathname))
     .replace(/^[/\\]+/, "")
